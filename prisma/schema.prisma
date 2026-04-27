@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- AUTH MODELS ---
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String?  // Campo legado; Better Auth usa Account.password
+  role      String   @default("admin") // Campo adicional para panel interno
+  image     String? // S3 Photo URL
+  emailVerified Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions  Session[]
+  accounts  Account[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// --- LANDING PAGE MODELS ---
+
+model HeroConfig {
+  id         Int      @id @default(1)
+  bienvenido String   @default("Velocidad estable incluso en zonas donde otros no llegan.")
+  empresa    String   @default("Bioconstructores Asociados Sas")
+  slogan     String   @default("Disfruta de hasta +200MB en Villavicencio.")
+  heroImage  String   @default("/images/fondo.png")
+  updatedAt  DateTime @updatedAt
+}
+
+model Plan {
+  id          Int      @id @default(autoincrement())
+  speed       String   // e.g., "50MB"
+  price       String   // e.g., "68K"
+  tv          String   // e.g., "1 Punto de TV GRATIS"
+  monthLabel  String   @default("/mes")
+  description String   @default("Ideal para hogares que buscan conexión estable para navegar, estudiar y disfrutar contenido sin interrupciones.")
+  buttonLabel String   @default("Elegir plan")
+  includeLabel String  @default("Incluye")
+  popularLabel String  @default("Popular")
+  suscripcion String   // e.g., "89.000"
+  zona        String   // "nohora", "zuria", "mesetas"
+  isPopular   Boolean  @default(false)
+  order       Int      @default(0)
+}
+
+model MapPoint {
+  id     Int     @id @default(autoincrement())
+  nombre String
+  // Campos legacy del mapa anterior
+  x      Float   @default(0)
+  y      Float   @default(0)
+  dotX   Float   @default(0)
+  dotY   Float   @default(0)
+  // Campos actuales para mapa real de Villavicencio
+  lat    Float?
+  lng    Float?
+  color  String? @default("#2563EB")
+  radio  Int?    @default(300)
+}
+
+model ConnectionConfig {
+  id         Int      @id @default(1)
+  titulo     String   @default("Conexión confiable para tu día a día")
+  subtitulo  String   @default("Disfruta de internet estable, rápido y confiable para tu hogar.")
+  buttonText String   @default("Empezar ahora")
+  updatedAt  DateTime @updatedAt
+  features   ConnectionFeature[]
+}
+
+model ConnectionFeature {
+  id                 Int              @id @default(autoincrement())
+  text               String
+  icon               String           // Lucide icon name
+  connectionConfigId Int
+  connectionConfig   ConnectionConfig @relation(fields: [connectionConfigId], references: [id])
+}

@@ -8,6 +8,8 @@ import { getMapPoints } from "@/backend/actions";
 interface MapPoint {
   id: number;
   nombre: string;
+  x?: number | null;
+  y?: number | null;
   lat?: number | null;
   lng?: number | null;
   color?: string | null;
@@ -44,9 +46,13 @@ const MapSection = () => {
     { id: 8, nombre: "Quintas de la Suria", lat: 4.082271, lng: -73.64096, color: "#64748B", radio: 350 },
   ];
 
-  const pointsWithCoords = points.filter(
-    (point) => typeof point.lat === "number" && typeof point.lng === "number"
-  );
+  const pointsWithCoords = points
+    .map((point) => {
+      const lat = typeof point.lat === "number" ? point.lat : point.y;
+      const lng = typeof point.lng === "number" ? point.lng : point.x;
+      return { ...point, lat: lat ?? null, lng: lng ?? null };
+    })
+    .filter((point) => typeof point.lat === "number" && typeof point.lng === "number");
   const normalizedPoints = pointsWithCoords.length > 0 ? pointsWithCoords : fallbackBarrios;
 
   const latValues = normalizedPoints.map((point) => point.lat as number);
@@ -130,19 +136,17 @@ const MapSection = () => {
     }));
 
   const handleZoneClick = (point: MapPoint) => {
-    if (typeof point.lat === "number" && typeof point.lng === "number") {
-      const radio = Number(point.radio ?? 300);
+    if (typeof point.lat !== "number" || typeof point.lng !== "number") return;
 
-      // Aproxima el zoom en Google Maps basado en el radio configurado por admin.
-      const zoomFromRadio =
-        radio <= 200 ? 18 :
-        radio <= 300 ? 17 :
-        radio <= 450 ? 16 :
-        radio <= 700 ? 15 : 14;
+    const radio = Number(point.radio ?? 300);
+    const zoomFromRadio =
+      radio <= 200 ? 18 :
+      radio <= 300 ? 17 :
+      radio <= 450 ? 16 :
+      radio <= 700 ? 15 : 14;
 
-      const mapsUrl = `https://www.google.com/maps/@${point.lat},${point.lng},${zoomFromRadio}z`;
-      window.open(mapsUrl, "_blank", "noopener,noreferrer");
-    }
+    const mapsUrl = `https://www.google.com/maps?q=${point.lat},${point.lng}&z=${zoomFromRadio}`;
+    window.open(mapsUrl, "_blank", "noopener,noreferrer");
   };
 
   return (

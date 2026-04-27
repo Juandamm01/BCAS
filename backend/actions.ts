@@ -205,7 +205,13 @@ export async function createPlan(data: {
 // --- MAP ACTIONS ---
 export async function getMapPoints() {
   try {
-    return await prisma.mapPoint.findMany({ orderBy: { id: "asc" } });
+    const points = await prisma.mapPoint.findMany({ orderBy: { id: "asc" } });
+    // Compatibilidad: si el cliente Prisma en runtime no expone lat/lng, usamos x/y como coordenadas.
+    return points.map((point) => ({
+      ...point,
+      lat: (point as unknown as { lat?: number | null }).lat ?? point.y ?? null,
+      lng: (point as unknown as { lng?: number | null }).lng ?? point.x ?? null,
+    }));
   } catch (error) {
     return [];
   }
@@ -226,9 +232,19 @@ export async function updateMapPoint(
   }
 ) {
   try {
+    const latValue = typeof data.lat === "number" ? data.lat : undefined;
+    const lngValue = typeof data.lng === "number" ? data.lng : undefined;
     await prisma.mapPoint.update({
       where: { id },
-      data,
+      data: {
+        nombre: data.nombre,
+        x: lngValue ?? data.x ?? 0,
+        y: latValue ?? data.y ?? 0,
+        dotX: data.dotX ?? 0,
+        dotY: data.dotY ?? 0,
+        color: data.color ?? "#2563EB",
+        radio: data.radio ?? 300,
+      },
     });
     revalidatePath("/");
     revalidatePath("/admin/dashboard");
@@ -251,15 +267,15 @@ export async function createMapPoint(data: {
   radio?: number;
 }) {
   try {
+    const latValue = typeof data.lat === "number" ? data.lat : undefined;
+    const lngValue = typeof data.lng === "number" ? data.lng : undefined;
     await prisma.mapPoint.create({
       data: {
         nombre: data.nombre,
-        x: data.x ?? 0,
-        y: data.y ?? 0,
+        x: lngValue ?? data.x ?? 0,
+        y: latValue ?? data.y ?? 0,
         dotX: data.dotX ?? 0,
         dotY: data.dotY ?? 0,
-        lat: data.lat,
-        lng: data.lng,
         color: data.color ?? "#2563EB",
         radio: data.radio ?? 300,
       },

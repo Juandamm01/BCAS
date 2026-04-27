@@ -61,9 +61,28 @@ const Plans = () => {
 
   const normalizeTvLabel = (value?: string) => {
     if (!value) return "1 Punto de TV GRATIS";
-    if (value.trim() === "+1 TV") return "1 Punto de TV GRATIS";
-    if (value.trim() === "+2 TV") return "2 Punto de TV GRATIS";
-    return value;
+    const raw = value.trim();
+    const compact = raw.toLowerCase().replace(/\s+/g, "");
+
+    if (
+      compact === "+1tv" ||
+      compact === "1tv" ||
+      compact === "1puntodetvgratis" ||
+      compact === "1puntotvgratis"
+    ) {
+      return "1 Punto de TV GRATIS";
+    }
+
+    if (
+      compact === "+2tv" ||
+      compact === "2tv" ||
+      compact === "2puntosdetvgratis" ||
+      compact === "2puntostvgratis"
+    ) {
+      return "2 Puntos de TV GRATIS";
+    }
+
+    return raw;
   };
 
   return (

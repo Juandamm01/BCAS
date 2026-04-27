@@ -41,7 +41,6 @@ import {
   removeProfilePhoto
 } from "@/backend/actions";
 import Image from "next/image";
-import gsap from "gsap";
 import { signOutAdminAction } from "@/app/admin/actions";
 
 interface MapPointAdmin {
@@ -124,10 +123,10 @@ const AdminDashboard = () => {
   });
   const [newMapPointData, setNewMapPointData] = useState({
     nombre: "",
-    lat: DEFAULT_MAP_COORDS.lat,
-    lng: DEFAULT_MAP_COORDS.lng,
+    lat: String(DEFAULT_MAP_COORDS.lat),
+    lng: String(DEFAULT_MAP_COORDS.lng),
     color: "#2563EB",
-    radio: 300,
+    radio: "300",
   });
   const [newZoneName, setNewZoneName] = useState("");
 
@@ -138,10 +137,6 @@ const AdminDashboard = () => {
   };
 
   const formatCoordinate = (value: number) => Number(value).toFixed(6);
-
-  useEffect(() => {
-    gsap.set(".admin-reveal", { clearProps: "all" });
-  }, [activeTab, adminUsers.length]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -196,15 +191,6 @@ const AdminDashboard = () => {
       }
     };
     fetchData();
-
-    const adminRefreshInterval = setInterval(async () => {
-      const admin = await getAdminData("henro@gmail.com");
-      setAdminUser(admin);
-      const admins = (await getAdminUsers()) as AdminUserItem[];
-      setAdminUsers(admins);
-    }, 8000);
-
-    return () => clearInterval(adminRefreshInterval);
   }, []);
 
   const tabs = [
@@ -272,7 +258,21 @@ const AdminDashboard = () => {
       return;
     }
 
-    const res = await createMapPoint(newMapPointData);
+    const lat = Number.parseFloat(newMapPointData.lat);
+    const lng = Number.parseFloat(newMapPointData.lng);
+    const radio = Number.parseFloat(newMapPointData.radio);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radio)) {
+      toast.error("Ingresa coordenadas y radio válidos");
+      return;
+    }
+
+    const res = await createMapPoint({
+      nombre: newMapPointData.nombre.trim(),
+      lat,
+      lng,
+      color: newMapPointData.color,
+      radio,
+    });
     if (res.success) {
       const refreshed = (await getMapPoints()) as unknown as Array<{
         id: number;
@@ -292,7 +292,13 @@ const AdminDashboard = () => {
           radio: Number(point.radio ?? 300),
         }))
       );
-      setNewMapPointData({ nombre: "", lat: DEFAULT_MAP_COORDS.lat, lng: DEFAULT_MAP_COORDS.lng, color: "#2563EB", radio: 300 });
+      setNewMapPointData({
+        nombre: "",
+        lat: String(DEFAULT_MAP_COORDS.lat),
+        lng: String(DEFAULT_MAP_COORDS.lng),
+        color: "#2563EB",
+        radio: "300",
+      });
       toast.success("Punto del mapa creado");
     } else {
       toast.error("No se pudo crear el punto");
@@ -793,13 +799,13 @@ const AdminDashboard = () => {
                 <div className="grid grid-cols-1 gap-4">
                   <div className="p-5 rounded-3xl border border-slate-800 bg-slate-900/50 space-y-4">
                     <h3 className="font-bold text-white text-lg">Añadir Sector</h3>
-                    <input value={newMapPointData.nombre} onChange={(e) => setNewMapPointData({ ...newMapPointData, nombre: e.target.value })} placeholder="Nombre del sector" className="w-full bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
+                    <input value={newMapPointData.nombre} onChange={(e) => setNewMapPointData({ ...newMapPointData, nombre: e.target.value })} placeholder="Nombre del sector (Prueba barrio)" className="w-full bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
                     <div className="grid grid-cols-2 gap-3">
-                      <input type="number" step="0.000001" value={newMapPointData.lat} onChange={(e) => setNewMapPointData({ ...newMapPointData, lat: Number(e.target.value) })} placeholder="Latitud" className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
-                      <input type="number" step="0.000001" value={newMapPointData.lng} onChange={(e) => setNewMapPointData({ ...newMapPointData, lng: Number(e.target.value) })} placeholder="Longitud" className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
+                      <input type="text" inputMode="decimal" value={newMapPointData.lat} onChange={(e) => setNewMapPointData({ ...newMapPointData, lat: e.target.value })} placeholder="Latitud (ej: 4.13912)" className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
+                      <input type="text" inputMode="decimal" value={newMapPointData.lng} onChange={(e) => setNewMapPointData({ ...newMapPointData, lng: e.target.value })} placeholder="Longitud (ej: -73.65)" className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <input type="number" value={newMapPointData.radio} onChange={(e) => setNewMapPointData({ ...newMapPointData, radio: Number(e.target.value) })} placeholder="Radio (m)" className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
+                      <input type="text" inputMode="numeric" value={newMapPointData.radio} onChange={(e) => setNewMapPointData({ ...newMapPointData, radio: e.target.value })} placeholder="Radio (m)" className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm" />
                       <label className="bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 flex items-center justify-between gap-2">
                         <span>Color</span>
                         <input type="color" value={newMapPointData.color} onChange={(e) => setNewMapPointData({ ...newMapPointData, color: e.target.value })} className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer" />

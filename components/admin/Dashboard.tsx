@@ -27,6 +27,7 @@ import {
   updateHeroImage,
   getConnectionConfig,
   updateConnectionConfig,
+  updateConnectionImage,
   getPlans, 
   createPlan,
   updatePlan, 
@@ -79,6 +80,18 @@ interface AdminUserItem {
 
 const PORTAL_CLIENTES_URL = "https://avisos.wisphub.net/saldo/bcas-sas/";
 const DEFAULT_MAP_COORDS = { lat: 4.14546, lng: -73.655689 };
+const DEFAULT_CONNECTION_FEATURES = [
+  "Conexión estable",
+  "Velocidad ideal para tu hogar",
+  "Instalación rápida",
+  "Soporte técnico cercano",
+  "Planes adaptados a ti",
+];
+const DEFAULT_CONNECTION_COPY = {
+  titulo: "Conexión confiable para tu día a día",
+  subtitulo: "Disfruta internet estable, rápido y pensado para tu hogar, con soporte cercano y una experiencia sin complicaciones.",
+  buttonText: "Empezar ahora",
+};
 
 const AdminDashboard = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,9 +99,11 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPlans, setIsSavingPlans] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroImageInputRef = useRef<HTMLInputElement>(null);
+  const connectionImageInputRef = useRef<HTMLInputElement>(null);
   
   // Data States
   const [adminUser, setAdminUser] = useState<any>(null);
@@ -100,11 +115,18 @@ const AdminDashboard = () => {
     heroImage: ""
   });
   const [connectionData, setConnectionData] = useState({
-    titulo: "",
-    subtitulo: "",
-    buttonText: "",
-    features: ["", "", "", "", ""],
+    titulo: DEFAULT_CONNECTION_COPY.titulo,
+    subtitulo: DEFAULT_CONNECTION_COPY.subtitulo,
+    buttonText: DEFAULT_CONNECTION_COPY.buttonText,
+    backgroundImage: "/images/conexion.png",
+    features: DEFAULT_CONNECTION_FEATURES,
   });
+  const [showConnectionCropper, setShowConnectionCropper] = useState(false);
+  const [connectionCropSource, setConnectionCropSource] = useState<string | null>(null);
+  const [connectionCropFileName, setConnectionCropFileName] = useState("connection-image.jpg");
+  const [connectionCropX, setConnectionCropX] = useState(0);
+  const [connectionCropY, setConnectionCropY] = useState(0);
+  const [connectionCropZoom, setConnectionCropZoom] = useState(1);
   const [plansData, setPlansData] = useState<PlanAdmin[]>([]);
   const [mapPointsData, setMapPointsData] = useState<MapPointAdmin[]>([]);
   const [newPlanData, setNewPlanData] = useState({
@@ -179,14 +201,16 @@ const AdminDashboard = () => {
 
       const connection = await getConnectionConfig();
       if (connection) {
+        const incomingFeatures =
+          connection.features?.length > 0
+            ? connection.features.map((feature: { text: string }) => feature.text)
+            : DEFAULT_CONNECTION_FEATURES;
         setConnectionData({
-          titulo: connection.titulo,
-          subtitulo: connection.subtitulo,
-          buttonText: connection.buttonText,
-          features:
-            connection.features?.length > 0
-              ? connection.features.map((feature: { text: string }) => feature.text)
-              : ["Conexión estable", "Velocidad ideal para tu hogar", "Instalación rápida", "Soporte técnico cercano", "Planes adaptados a ti"],
+          titulo: connection.titulo?.trim() || DEFAULT_CONNECTION_COPY.titulo,
+          subtitulo: connection.subtitulo?.trim() || DEFAULT_CONNECTION_COPY.subtitulo,
+          buttonText: connection.buttonText?.trim() || DEFAULT_CONNECTION_COPY.buttonText,
+          backgroundImage: connection.backgroundImage || "/images/conexion.png",
+          features: incomingFeatures,
         });
       }
     };
@@ -222,15 +246,8 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleUpdatePlan = async (id: number, data: Partial<PlanAdmin>) => {
-    const res = await updatePlan(id, data);
-    if (res.success) {
-      const refreshed = await getPlans();
-      setPlansData(refreshed);
-      toast.success("Plan actualizado");
-    } else {
-      toast.error("No se pudo actualizar");
-    }
+  const updatePlanDraft = (id: number, patch: Partial<PlanAdmin>) => {
+    setPlansData((prev) => prev.map((plan) => (plan.id === id ? { ...plan, ...patch } : plan)));
   };
 
   const handleCreatePlan = async (overrides?: Partial<typeof newPlanData>) => {
@@ -246,7 +263,13 @@ const AdminDashboard = () => {
 
   const handleSaveConnection = async () => {
     setIsSaving(true);
-    const res = await updateConnectionConfig(connectionData);
+    const cleanedFeatures = connectionData.features
+      .map((feature) => feature.trim())
+      .filter((feature) => feature.length > 0);
+    const res = await updateConnectionConfig({
+      ...connectionData,
+      features: cleanedFeatures.length > 0 ? cleanedFeatures : DEFAULT_CONNECTION_FEATURES,
+    });
     if (res.success) toast.success("Sección Conexión actualizada");
     else toast.error("Error al actualizar Conexión");
     setIsSaving(false);
@@ -369,22 +392,43 @@ const AdminDashboard = () => {
     });
   };
 
-  const handleRenameSection = async (oldZone: string, newZone: string) => {
-    const trimmed = newZone.trim();
-    if (!trimmed || trimmed === oldZone) return;
-    const plansInSection = plansData.filter((plan) => plan.zona === oldZone);
-    await Promise.all(plansInSection.map((plan) => updatePlan(plan.id, { zona: trimmed })));
-    const refreshed = await getPlans();
-    setPlansData(refreshed);
-    toast.success("Sección actualizada");
+  const updateSectionDraft = (zona: string, patch: Partial<PlanAdmin>) => {
+    setPlansData((prev) =>
+      prev.map((plan) => (plan.zona === zona ? { ...plan, ...patch } : plan))
+    );
   };
 
-  const handleSectionMetaChange = async (zona: string, patch: Partial<PlanAdmin>) => {
+  const handleSaveSectionPlans = async (zona: string) => {
     const plansInSection = plansData.filter((plan) => plan.zona === zona);
-    await Promise.all(plansInSection.map((plan) => updatePlan(plan.id, patch)));
-    const refreshed = await getPlans();
-    setPlansData(refreshed);
-    toast.success("Sección actualizada");
+    if (plansInSection.length === 0) return;
+
+    setIsSavingPlans(true);
+    try {
+      const results = await Promise.all(
+        plansInSection.map((plan) =>
+          updatePlan(plan.id, {
+            speed: plan.speed,
+            price: plan.price,
+            tv: plan.tv,
+            monthLabel: plan.monthLabel,
+            description: plan.description,
+            buttonLabel: plan.buttonLabel,
+            includeLabel: plan.includeLabel,
+            popularLabel: plan.popularLabel,
+            suscripcion: plan.suscripcion,
+            zona: plan.zona,
+            isPopular: !!plan.isPopular,
+          })
+        )
+      );
+      if (results.every((result) => result.success)) {
+        toast.success("Sección guardada");
+      } else {
+        toast.error("Algunos cambios no se pudieron guardar");
+      }
+    } finally {
+      setIsSavingPlans(false);
+    }
   };
 
   const handleOpenPortalClientes = () => {
@@ -432,6 +476,94 @@ const AdminDashboard = () => {
       toast.success("Imagen del hero actualizada", { id: "hero-upload" });
     } else {
       toast.error("No se pudo subir la imagen", { id: "hero-upload" });
+    }
+  };
+
+  const handleConnectionImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (connectionCropSource) {
+      URL.revokeObjectURL(connectionCropSource);
+    }
+    const localUrl = URL.createObjectURL(file);
+    setConnectionCropSource(localUrl);
+    setConnectionCropFileName(file.name || "connection-image.jpg");
+    setConnectionCropX(0);
+    setConnectionCropY(0);
+    setConnectionCropZoom(1);
+    setShowConnectionCropper(true);
+    e.target.value = "";
+  };
+
+  const closeConnectionCropper = () => {
+    if (connectionCropSource) {
+      URL.revokeObjectURL(connectionCropSource);
+    }
+    setConnectionCropSource(null);
+    setShowConnectionCropper(false);
+    setConnectionCropX(0);
+    setConnectionCropY(0);
+    setConnectionCropZoom(1);
+  };
+
+  const handleUploadAdjustedConnectionImage = async () => {
+    if (!connectionCropSource) return;
+    try {
+      const img = new window.Image();
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("No se pudo cargar la imagen"));
+      });
+      img.src = connectionCropSource;
+      await loaded;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280;
+      canvas.height = 720;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        toast.error("No se pudo preparar la imagen");
+        return;
+      }
+
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const drawWidth = canvas.width * connectionCropZoom;
+      const drawHeight = (img.naturalHeight / img.naturalWidth) * drawWidth;
+      const xOffset = (connectionCropX / 100) * canvas.width;
+      const yOffset = (connectionCropY / 100) * canvas.height;
+      const dx = (canvas.width - drawWidth) / 2 + xOffset;
+      const dy = (canvas.height - drawHeight) / 2 + yOffset;
+
+      ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((result) => resolve(result), "image/jpeg", 0.92);
+      });
+
+      if (!blob) {
+        toast.error("No se pudo procesar la imagen");
+        return;
+      }
+
+      const adjustedFile = new File([blob], connectionCropFileName.replace(/\.[^.]+$/, "") + "-ajustada.jpg", {
+        type: "image/jpeg",
+      });
+      const formData = new FormData();
+      formData.append("file", adjustedFile);
+
+      toast.loading("Subiendo imagen de conexión...", { id: "connection-upload" });
+      const res = await updateConnectionImage(formData);
+      if (res.success && res.url) {
+        setConnectionData((prev) => ({ ...prev, backgroundImage: res.url! }));
+        toast.success("Imagen de conexión actualizada", { id: "connection-upload" });
+        closeConnectionCropper();
+      } else {
+        toast.error("No se pudo subir la imagen", { id: "connection-upload" });
+      }
+    } catch {
+      toast.error("No se pudo ajustar la imagen");
     }
   };
 
@@ -614,7 +746,7 @@ const AdminDashboard = () => {
             )}
 
             {activeTab === "plans" && (
-              <motion.div key="plans" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+              <motion.div key="plans" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 max-w-7xl">
                 <div className="flex items-center justify-between">
                   <h2 className="text-3xl font-black text-white">Secciones de Precios</h2>
                   <button type="button" onClick={handleCreateSectionForPlans} className="bg-blue-900 hover:bg-blue-800 border border-blue-700 rounded-xl px-4 py-2 text-sm text-white font-semibold cursor-pointer flex items-center gap-2">
@@ -630,70 +762,117 @@ const AdminDashboard = () => {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {Object.entries(groupedPlans).map(([zona, plans]) => (
-                    <div key={zona} className="rounded-3xl bg-slate-900 border border-slate-800 p-5 space-y-4">
+                    <div key={zona} className="rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
                       <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Zona / Barrio(s)</p>
-                        <button onClick={() => handleDeleteSection(zona)} className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer">
-                          <Trash2 size={18} />
-                        </button>
+                        <p className="text-xs text-slate-300 font-black uppercase tracking-widest">Zona / Barrio(s)</p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveSectionPlans(zona)}
+                            disabled={isSavingPlans}
+                            className="px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold disabled:opacity-60 cursor-pointer"
+                          >
+                            Guardar sección
+                          </button>
+                          <button onClick={() => handleDeleteSection(zona)} className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
                       <input
-                        defaultValue={zona}
-                        onBlur={(e) => handleRenameSection(zona, e.target.value)}
-                        className="w-full bg-black border border-slate-800 rounded-xl px-3 py-2 text-sm text-white font-bold"
+                        value={plans.find((plan) => plan.zona === zona)?.zona || zona}
+                        onChange={(e) => updateSectionDraft(zona, { zona: e.target.value })}
+                        className="w-full bg-black border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white font-bold"
                       />
                       <div className="grid grid-cols-2 gap-2">
                         <input
-                          defaultValue={plans[0]?.suscripcion || ""}
-                          onBlur={(e) => handleSectionMetaChange(zona, { suscripcion: e.target.value })}
+                          value={plans[0]?.suscripcion || ""}
+                          onChange={(e) => updateSectionDraft(zona, { suscripcion: e.target.value })}
                           placeholder="Subtítulo (suscripción)"
-                          className="bg-black border border-slate-800 rounded-lg px-2 py-2 text-xs text-white"
+                          className="bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
                         />
                         <input
-                          defaultValue={plans[0]?.popularLabel || ""}
-                          onBlur={(e) => handleSectionMetaChange(zona, { popularLabel: e.target.value })}
+                          value={plans[0]?.popularLabel || ""}
+                          onChange={(e) => updateSectionDraft(zona, { popularLabel: e.target.value })}
                           placeholder="Badge"
-                          className="bg-black border border-slate-800 rounded-lg px-2 py-2 text-xs text-white"
+                          className="bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
                         />
                       </div>
                       <label className="text-xs text-slate-300 flex items-center gap-2">
                         <input
                           type="checkbox"
-                          defaultChecked={!!plans[0]?.isPopular}
-                          onChange={(e) => handleSectionMetaChange(zona, { isPopular: e.target.checked })}
+                          checked={!!plans[0]?.isPopular}
+                          onChange={(e) => updateSectionDraft(zona, { isPopular: e.target.checked })}
                         />
                         Mostrar como sección Premium
                       </label>
-                      <div className="rounded-2xl border border-slate-800 bg-black/30 p-3">
+                      <div className="rounded-2xl border border-slate-800 bg-black/30 p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Planes de esta zona</p>
+                          <p className="text-xs text-slate-300 font-black uppercase tracking-widest">Planes de esta zona</p>
                           <button onClick={() => handleAddPlanToSection(zona)} className="bg-blue-900 hover:bg-blue-800 text-white text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer">
                             + PLAN
                           </button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                           {plans.map((plan) => (
-                            <div key={plan.id} className="grid grid-cols-1 sm:grid-cols-[1fr_90px_80px_30px] gap-2 items-center">
-                              <input
-                                defaultValue={plan.speed}
-                                onBlur={(e) => handleUpdatePlan(plan.id, { speed: e.target.value })}
-                                className="bg-black border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white"
+                            <div key={plan.id} className="rounded-xl border border-slate-700 bg-black/50 p-4 space-y-3">
+                              <div className="flex items-center justify-end">
+                                <button onClick={() => handleDeletePlan(plan.id)} className="p-1.5 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-all cursor-pointer">
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                                <input
+                                  value={plan.speed}
+                                  onChange={(e) => updatePlanDraft(plan.id, { speed: e.target.value })}
+                                  placeholder="50MB"
+                                  className="w-full min-w-0 bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
+                                />
+                                <input
+                                  value={plan.price}
+                                  onChange={(e) => updatePlanDraft(plan.id, { price: e.target.value })}
+                                  placeholder="68K"
+                                  className="w-full min-w-0 bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
+                                />
+                                <input
+                                  value={plan.monthLabel || ""}
+                                  onChange={(e) => updatePlanDraft(plan.id, { monthLabel: e.target.value })}
+                                  placeholder="/mes"
+                                  className="w-full min-w-0 bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
+                                />
+                              </div>
+
+                              <textarea
+                                value={plan.description || ""}
+                                onChange={(e) => updatePlanDraft(plan.id, { description: e.target.value })}
+                                placeholder="Descripción del plan"
+                                className="w-full h-24 bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white resize-none"
                               />
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <input
+                                  value={plan.buttonLabel || ""}
+                                  onChange={(e) => updatePlanDraft(plan.id, { buttonLabel: e.target.value })}
+                                  placeholder="Texto botón"
+                                  className="bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
+                                />
+                                <input
+                                  value={plan.includeLabel || ""}
+                                  onChange={(e) => updatePlanDraft(plan.id, { includeLabel: e.target.value })}
+                                  placeholder="Texto incluye"
+                                  className="bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
+                                />
+                              </div>
+
                               <input
-                                defaultValue={plan.price}
-                                onBlur={(e) => handleUpdatePlan(plan.id, { price: e.target.value })}
-                                className="bg-black border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white"
+                                value={plan.tv}
+                                onChange={(e) => updatePlanDraft(plan.id, { tv: e.target.value })}
+                                placeholder="1 Punto de TV GRATIS"
+                                className="w-full bg-black border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white"
                               />
-                              <input
-                                defaultValue={plan.tv}
-                                onBlur={(e) => handleUpdatePlan(plan.id, { tv: e.target.value })}
-                                className="bg-black border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white"
-                              />
-                              <button onClick={() => handleDeletePlan(plan.id)} className="p-1.5 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-all cursor-pointer justify-self-end sm:justify-self-auto">
-                                <Trash2 size={14} />
-                              </button>
                             </div>
                           ))}
                         </div>
@@ -733,7 +912,7 @@ const AdminDashboard = () => {
                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6">
                     <div className="flex items-center justify-between mb-2">
                        <h3 className="text-xl font-bold text-white">Editar Hero Principal</h3>
-                       <button onClick={handleSaveHero} disabled={isSaving} className="flex items-center space-x-2 bg-blue-700 text-white px-6 py-2 rounded-xl font-bold disabled:opacity-50 cursor-pointer">
+                       <button onClick={handleSaveHero} disabled={isSaving} className="flex items-center space-x-2 bg-blue-900 hover:bg-blue-800 text-white px-6 py-2 rounded-xl font-bold disabled:opacity-50 cursor-pointer">
                          {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                          <span>Guardar</span>
                        </button>
@@ -852,7 +1031,7 @@ const AdminDashboard = () => {
                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6">
                     <div className="flex items-center justify-between mb-2">
                        <h3 className="text-xl font-bold text-white">Editar Sección Conexión</h3>
-                       <button onClick={handleSaveConnection} disabled={isSaving} className="flex items-center space-x-2 bg-blue-700 text-white px-6 py-2 rounded-xl font-bold disabled:opacity-50 cursor-pointer">
+                       <button onClick={handleSaveConnection} disabled={isSaving} className="flex items-center space-x-2 bg-blue-900 hover:bg-blue-800 text-white px-6 py-2 rounded-xl font-bold disabled:opacity-50 cursor-pointer">
                          {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                          <span>Guardar</span>
                        </button>
@@ -865,6 +1044,7 @@ const AdminDashboard = () => {
                            type="text"
                            value={connectionData.titulo}
                            onChange={e => setConnectionData({ ...connectionData, titulo: e.target.value })}
+                           placeholder={DEFAULT_CONNECTION_COPY.titulo}
                            className="w-full bg-black border border-slate-800 rounded-2xl px-5 py-4 text-white focus:border-blue-500 outline-none transition-all"
                          />
                        </div>
@@ -873,8 +1053,28 @@ const AdminDashboard = () => {
                          <textarea
                            value={connectionData.subtitulo}
                            onChange={e => setConnectionData({ ...connectionData, subtitulo: e.target.value })}
+                           placeholder={DEFAULT_CONNECTION_COPY.subtitulo}
                            className="w-full bg-black border border-slate-800 rounded-2xl px-5 py-4 text-white focus:border-blue-500 outline-none transition-all h-28 resize-none"
                          />
+                       </div>
+                       <div>
+                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Imagen de Fondo</label>
+                         <div className="mt-4">
+                           <input type="file" ref={connectionImageInputRef} className="hidden" accept="image/*" onChange={handleConnectionImageUpload} />
+                           <button
+                             type="button"
+                             onClick={() => connectionImageInputRef.current?.click()}
+                             className="w-full flex items-center justify-center space-x-3 py-4 border border-dashed border-slate-700 rounded-2xl text-slate-300 hover:text-white hover:border-slate-500 transition-all font-bold cursor-pointer"
+                           >
+                             <Camera size={18} />
+                             <span>Cambiar imagen de conexión</span>
+                           </button>
+                         </div>
+                         {connectionData.backgroundImage && (
+                           <div className="relative mt-4 h-40 w-full rounded-2xl overflow-hidden border border-slate-800">
+                             <Image src={connectionData.backgroundImage} alt="Connection preview" fill sizes="100vw" className="object-cover" />
+                           </div>
+                         )}
                        </div>
                        <div>
                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Texto del Botón</label>
@@ -882,24 +1082,59 @@ const AdminDashboard = () => {
                            type="text"
                            value={connectionData.buttonText}
                            onChange={e => setConnectionData({ ...connectionData, buttonText: e.target.value })}
+                           placeholder={DEFAULT_CONNECTION_COPY.buttonText}
                            className="w-full bg-black border border-slate-800 rounded-2xl px-5 py-4 text-white focus:border-blue-500 outline-none transition-all"
                          />
                        </div>
-                       {connectionData.features.map((feature, index) => (
-                         <div key={index}>
-                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">{`Feature ${index + 1}`}</label>
-                           <input
-                             type="text"
-                             value={feature}
-                             onChange={(e) => {
-                               const updated = [...connectionData.features];
-                               updated[index] = e.target.value;
-                               setConnectionData({ ...connectionData, features: updated });
-                             }}
-                             className="w-full bg-black border border-slate-800 rounded-2xl px-5 py-4 text-white focus:border-blue-500 outline-none transition-all"
-                           />
+                       <div className="space-y-3">
+                         <div className="flex items-center justify-between">
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Características</label>
+                           <button
+                             type="button"
+                             onClick={() =>
+                               setConnectionData({
+                                 ...connectionData,
+                                 features: [...connectionData.features, ""],
+                               })
+                             }
+                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-900/70 hover:bg-blue-800 text-white text-xs font-semibold cursor-pointer"
+                           >
+                             <Plus size={14} />
+                             Agregar
+                           </button>
                          </div>
-                       ))}
+
+                         {connectionData.features.map((feature, index) => (
+                           <div key={index} className="flex items-center gap-2">
+                             <input
+                               type="text"
+                               value={feature}
+                               onChange={(e) => {
+                                 const updated = [...connectionData.features];
+                                 updated[index] = e.target.value;
+                                 setConnectionData({ ...connectionData, features: updated });
+                               }}
+                               placeholder={DEFAULT_CONNECTION_FEATURES[index] || `Característica ${index + 1}`}
+                               className="w-full bg-black border border-slate-800 rounded-2xl px-5 py-4 text-white focus:border-blue-500 outline-none transition-all"
+                             />
+                             <button
+                               type="button"
+                               onClick={() => {
+                                 if (connectionData.features.length === 1) return;
+                                 setConnectionData({
+                                   ...connectionData,
+                                   features: connectionData.features.filter((_, featureIndex) => featureIndex !== index),
+                                 });
+                               }}
+                               disabled={connectionData.features.length === 1}
+                               className="p-3 rounded-xl border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                               aria-label="Eliminar característica"
+                             >
+                               <Trash2 size={16} />
+                             </button>
+                           </div>
+                         ))}
+                       </div>
                     </div>
                  </div>
               </motion.div>
@@ -910,6 +1145,94 @@ const AdminDashboard = () => {
 
       {/* Profile Modal */}
       <AnimatePresence>
+        {showConnectionCropper && connectionCropSource && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeConnectionCropper}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-3xl bg-[#0f172a] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-white">Ajustar imagen de conexión</h3>
+                  <button onClick={closeConnectionCropper} className="p-2 text-slate-500 hover:text-white transition-colors cursor-pointer">
+                    <X size={22} />
+                  </button>
+                </div>
+
+                <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden border border-slate-700 bg-black">
+                  <Image
+                    src={connectionCropSource}
+                    alt="Ajuste de imagen"
+                    fill
+                    sizes="100vw"
+                    className="object-contain"
+                    style={{
+                      transform: `translate(${connectionCropX}%, ${connectionCropY}%) scale(${connectionCropZoom})`,
+                      transformOrigin: "center",
+                    }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <label className="text-slate-300">
+                    Zoom
+                    <input
+                      type="range"
+                      min={1}
+                      max={2.5}
+                      step={0.01}
+                      value={connectionCropZoom}
+                      onChange={(e) => setConnectionCropZoom(Number(e.target.value))}
+                      className="w-full mt-2"
+                    />
+                  </label>
+                  <label className="text-slate-300">
+                    Mover horizontal
+                    <input
+                      type="range"
+                      min={-50}
+                      max={50}
+                      step={1}
+                      value={connectionCropX}
+                      onChange={(e) => setConnectionCropX(Number(e.target.value))}
+                      className="w-full mt-2"
+                    />
+                  </label>
+                  <label className="text-slate-300">
+                    Mover vertical
+                    <input
+                      type="range"
+                      min={-50}
+                      max={50}
+                      step={1}
+                      value={connectionCropY}
+                      onChange={(e) => setConnectionCropY(Number(e.target.value))}
+                      className="w-full mt-2"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={closeConnectionCropper} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 cursor-pointer">
+                    Cancelar
+                  </button>
+                  <button onClick={handleUploadAdjustedConnectionImage} className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-semibold cursor-pointer">
+                    Usar y subir imagen
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
         {showProfileModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
             <motion.div 

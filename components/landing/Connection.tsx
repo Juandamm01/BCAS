@@ -7,10 +7,12 @@ import { Wifi } from "lucide-react";
 import { getConnectionConfig } from "@/backend/actions";
 
 const Connection = () => {
+  const [imageAspectRatio, setImageAspectRatio] = useState(3 / 2);
   const [config, setConfig] = useState({
     titulo: "Conexión confiable para tu día a día",
     subtitulo: "Disfruta internet estable, rápido y pensado para tu hogar, con soporte cercano y una experiencia sin complicaciones.",
     buttonText: "Empezar ahora",
+    backgroundImage: "/images/conexion.png",
     features: [
       "Conexión estable",
       "Velocidad ideal para tu hogar",
@@ -28,6 +30,7 @@ const Connection = () => {
           titulo: data.titulo,
           subtitulo: data.subtitulo,
           buttonText: data.buttonText,
+          backgroundImage: data.backgroundImage || "/images/conexion.png",
           features:
             data.features?.length > 0
               ? data.features.map((feature: { text: string }) => feature.text)
@@ -47,18 +50,26 @@ const Connection = () => {
   return (
     <section className="py-16 bg-black overflow-hidden" id="connection">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="relative rounded-[1.2rem] md:rounded-[1.6rem] overflow-hidden min-h-[500px] flex items-center justify-center border border-white/15">
+        <div
+          className="relative rounded-[1.2rem] md:rounded-[1.6rem] overflow-hidden w-full flex items-center justify-center border border-white/15"
+          style={{ aspectRatio: imageAspectRatio }}
+        >
           <div className="absolute inset-0 z-0">
-             <Image 
-              src="/images/fondito.png" 
-              alt="Conexión confiable" 
-              fill 
+            <Image
+              src={config.backgroundImage}
+              alt="Conexión confiable"
+              fill
               priority
               sizes="100vw"
-              className="object-cover" 
-             />
-             <div className="absolute inset-0 bg-black/45"></div>
-             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-black/35"></div>
+              className="object-contain object-center"
+              onLoadingComplete={(img) => {
+                if (img.naturalWidth && img.naturalHeight) {
+                  setImageAspectRatio(img.naturalWidth / img.naturalHeight);
+                }
+              }}
+            />
+            <div className="absolute inset-0 bg-black/32"></div>
+            <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/72 via-black/38 to-transparent backdrop-blur-md"></div>
           </div>
 
           <div className="relative z-10 w-full p-8 md:p-14 flex flex-col items-center text-center">

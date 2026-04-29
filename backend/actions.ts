@@ -1,163 +1,74 @@
 "use server";
 
-import { prisma } from "@/backend/prisma";
-import { revalidatePath } from "next/cache";
-import { uploadToS3 } from "@/lib/s3";
+import {
+  getHeroConfig as getHeroConfigImpl,
+  updateHeroConfig as updateHeroConfigImpl,
+  updateHeroImage as updateHeroImageImpl,
+} from "@/backend/actions/hero";
+import {
+  getConnectionConfig as getConnectionConfigImpl,
+  updateConnectionConfig as updateConnectionConfigImpl,
+  updateConnectionImage as updateConnectionImageImpl,
+} from "@/backend/actions/connection";
+import {
+  getPlans as getPlansImpl,
+  updatePlan as updatePlanImpl,
+  deletePlan as deletePlanImpl,
+  createPlan as createPlanImpl,
+} from "@/backend/actions/plans";
+import {
+  getMapPoints as getMapPointsImpl,
+  updateMapPoint as updateMapPointImpl,
+  createMapPoint as createMapPointImpl,
+  deleteMapPoint as deleteMapPointImpl,
+} from "@/backend/actions/map";
+import {
+  getAdminData as getAdminDataImpl,
+  getAdminUsers as getAdminUsersImpl,
+  updateProfilePhoto as updateProfilePhotoImpl,
+  removeProfilePhoto as removeProfilePhotoImpl,
+} from "@/backend/actions/admin";
 
-// --- HERO ACTIONS ---
 export async function getHeroConfig() {
-  try {
-    return await prisma.heroConfig.findFirst() || await prisma.heroConfig.create({ data: {} });
-  } catch (error) {
-    console.error("Error fetching hero config:", error);
-    return null;
-  }
+  return getHeroConfigImpl();
 }
 
-export async function updateHeroConfig(data: { bienvenido: string, empresa: string, slogan: string, heroImage: string }) {
-  try {
-    await prisma.heroConfig.upsert({
-      where: { id: 1 },
-      update: data,
-      create: { id: 1, ...data }
-    });
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    console.error("Error updating hero config:", error);
-    return { success: false };
-  }
+export async function updateHeroConfig(data: { bienvenido: string; empresa: string; slogan: string; heroImage: string }) {
+  return updateHeroConfigImpl(data);
 }
 
 export async function updateHeroImage(formData: FormData) {
-  try {
-    const file = formData.get("file") as File;
-    if (!file) return { success: false, error: "No file provided" };
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const imageUrl = await uploadToS3(buffer, file.name, file.type);
-
-    await prisma.heroConfig.upsert({
-      where: { id: 1 },
-      update: { heroImage: imageUrl },
-      create: { id: 1, heroImage: imageUrl },
-    });
-
-    revalidatePath("/");
-    revalidatePath("/admin/dashboard");
-    return { success: true, url: imageUrl };
-  } catch (error) {
-    console.error("Hero image update error:", error);
-    return { success: false, error: "Upload failed" };
-  }
+  return updateHeroImageImpl(formData);
 }
 
-// --- CONNECTION ACTIONS ---
 export async function getConnectionConfig() {
-  try {
-    return (
-      (await prisma.connectionConfig.findUnique({
-        where: { id: 1 },
-        include: { features: { orderBy: { id: "asc" } } },
-      })) ||
-      (await prisma.connectionConfig.create({
-        data: {
-          id: 1,
-          titulo: "Conexión confiable para tu día a día",
-          subtitulo: "Disfruta internet estable, rápido y pensado para tu hogar, con soporte cercano y una experiencia sin complicaciones.",
-          buttonText: "Empezar ahora",
-          features: {
-            create: [
-              { text: "Conexión estable", icon: "wifi" },
-              { text: "Velocidad ideal para tu hogar", icon: "wifi" },
-              { text: "Instalación rápida", icon: "wifi" },
-              { text: "Soporte técnico cercano", icon: "wifi" },
-              { text: "Planes adaptados a ti", icon: "wifi" },
-            ],
-          },
-        },
-        include: { features: { orderBy: { id: "asc" } } },
-      }))
-    );
-  } catch (error) {
-    console.error("Error fetching connection config:", error);
-    return null;
-  }
+  return getConnectionConfigImpl();
 }
 
 export async function updateConnectionConfig(data: {
   titulo: string;
   subtitulo: string;
   buttonText: string;
+  backgroundImage: string;
   features: string[];
 }) {
-  try {
-    await prisma.connectionConfig.upsert({
-      where: { id: 1 },
-      update: {
-        titulo: data.titulo,
-        subtitulo: data.subtitulo,
-        buttonText: data.buttonText,
-        features: {
-          deleteMany: {},
-          create: data.features.map((text) => ({ text, icon: "wifi" })),
-        },
-      },
-      create: {
-        id: 1,
-        titulo: data.titulo,
-        subtitulo: data.subtitulo,
-        buttonText: data.buttonText,
-        features: {
-          create: data.features.map((text) => ({ text, icon: "wifi" })),
-        },
-      },
-    });
-    revalidatePath("/");
-    revalidatePath("/admin/dashboard");
-    return { success: true };
-  } catch (error) {
-    console.error("Error updating connection config:", error);
-    return { success: false };
-  }
+  return updateConnectionConfigImpl(data);
 }
 
-// --- PLAN ACTIONS ---
+export async function updateConnectionImage(formData: FormData) {
+  return updateConnectionImageImpl(formData);
+}
+
 export async function getPlans(zona?: string) {
-  try {
-    const where = zona ? { zona } : {};
-    return await prisma.plan.findMany({
-      where,
-      orderBy: { order: "asc" }
-    });
-  } catch (error) {
-    console.error("Error fetching plans:", error);
-    return [];
-  }
+  return getPlansImpl(zona);
 }
 
 export async function updatePlan(id: number, data: any) {
-  try {
-    await prisma.plan.update({
-      where: { id },
-      data
-    });
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    console.error("Error updating plan:", error);
-    return { success: false };
-  }
+  return updatePlanImpl(id, data);
 }
 
 export async function deletePlan(id: number) {
-  try {
-    await prisma.plan.delete({ where: { id } });
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    return { success: false };
-  }
+  return deletePlanImpl(id);
 }
 
 export async function createPlan(data: {
@@ -174,47 +85,11 @@ export async function createPlan(data: {
   order: number;
   isPopular?: boolean;
 }) {
-  try {
-    await prisma.plan.create({
-      data: {
-        speed: data.speed,
-        price: data.price,
-        tv: data.tv,
-        monthLabel: data.monthLabel ?? "/mes",
-        description:
-          data.description ??
-          "Ideal para hogares que buscan conexión estable para navegar, estudiar y disfrutar contenido sin interrupciones.",
-        buttonLabel: data.buttonLabel ?? "Elegir plan",
-        includeLabel: data.includeLabel ?? "Incluye",
-        popularLabel: data.popularLabel ?? "Popular",
-        suscripcion: data.suscripcion,
-        zona: data.zona,
-        order: data.order,
-        isPopular: data.isPopular ?? false,
-      },
-    });
-    revalidatePath("/");
-    revalidatePath("/admin/dashboard");
-    return { success: true };
-  } catch (error) {
-    console.error("Error creating plan:", error);
-    return { success: false };
-  }
+  return createPlanImpl(data);
 }
 
-// --- MAP ACTIONS ---
 export async function getMapPoints() {
-  try {
-    const points = await prisma.mapPoint.findMany({ orderBy: { id: "asc" } });
-    // Compatibilidad: si el cliente Prisma en runtime no expone lat/lng, usamos x/y como coordenadas.
-    return points.map((point) => ({
-      ...point,
-      lat: (point as unknown as { lat?: number | null }).lat ?? point.y ?? null,
-      lng: (point as unknown as { lng?: number | null }).lng ?? point.x ?? null,
-    }));
-  } catch (error) {
-    return [];
-  }
+  return getMapPointsImpl();
 }
 
 export async function updateMapPoint(
@@ -231,28 +106,7 @@ export async function updateMapPoint(
     radio?: number;
   }
 ) {
-  try {
-    const latValue = typeof data.lat === "number" ? data.lat : undefined;
-    const lngValue = typeof data.lng === "number" ? data.lng : undefined;
-    await prisma.mapPoint.update({
-      where: { id },
-      data: {
-        nombre: data.nombre,
-        x: lngValue ?? data.x ?? 0,
-        y: latValue ?? data.y ?? 0,
-        dotX: data.dotX ?? 0,
-        dotY: data.dotY ?? 0,
-        color: data.color ?? "#2563EB",
-        radio: data.radio ?? 300,
-      },
-    });
-    revalidatePath("/");
-    revalidatePath("/admin/dashboard");
-    return { success: true };
-  } catch (error) {
-    console.error("Error updating map point:", error);
-    return { success: false };
-  }
+  return updateMapPointImpl(id, data);
 }
 
 export async function createMapPoint(data: {
@@ -266,110 +120,25 @@ export async function createMapPoint(data: {
   color?: string;
   radio?: number;
 }) {
-  try {
-    const latValue = typeof data.lat === "number" ? data.lat : undefined;
-    const lngValue = typeof data.lng === "number" ? data.lng : undefined;
-    await prisma.mapPoint.create({
-      data: {
-        nombre: data.nombre,
-        x: lngValue ?? data.x ?? 0,
-        y: latValue ?? data.y ?? 0,
-        dotX: data.dotX ?? 0,
-        dotY: data.dotY ?? 0,
-        color: data.color ?? "#2563EB",
-        radio: data.radio ?? 300,
-      },
-    });
-    revalidatePath("/");
-    revalidatePath("/admin/dashboard");
-    return { success: true };
-  } catch (error) {
-    console.error("Error creating map point:", error);
-    return { success: false };
-  }
+  return createMapPointImpl(data);
 }
 
 export async function deleteMapPoint(id: number) {
-  try {
-    await prisma.mapPoint.delete({ where: { id } });
-    revalidatePath("/");
-    revalidatePath("/admin/dashboard");
-    return { success: true };
-  } catch (error) {
-    console.error("Error deleting map point:", error);
-    return { success: false };
-  }
+  return deleteMapPointImpl(id);
 }
 
-// --- USER / PROFILE ACTIONS ---
 export async function getAdminData(email: string) {
-  try {
-    return await prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        role: true
-      }
-    });
-  } catch (error) {
-    return null;
-  }
+  return getAdminDataImpl(email);
 }
 
 export async function getAdminUsers() {
-  try {
-    return await prisma.user.findMany({
-      where: { role: "admin" },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        role: true,
-        updatedAt: true,
-      },
-    });
-  } catch (error) {
-    console.error("Get Admin Users Error:", error);
-    return [];
-  }
+  return getAdminUsersImpl();
 }
 
 export async function updateProfilePhoto(email: string, formData: FormData) {
-  try {
-    const file = formData.get("file") as File;
-    if (!file) return { success: false, error: "No file provided" };
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const imageUrl = await uploadToS3(buffer, file.name, file.type);
-
-    await prisma.user.update({
-      where: { email },
-      data: { image: imageUrl }
-    });
-
-    revalidatePath("/admin/dashboard");
-    return { success: true, url: imageUrl };
-  } catch (error) {
-    console.error("Profile Photo Update Error:", error);
-    return { success: false, error: "Upload failed" };
-  }
+  return updateProfilePhotoImpl(email, formData);
 }
 
 export async function removeProfilePhoto(email: string) {
-  try {
-    await prisma.user.update({
-      where: { email },
-      data: { image: null },
-    });
-    revalidatePath("/admin/dashboard");
-    return { success: true };
-  } catch (error) {
-    console.error("Remove Profile Photo Error:", error);
-    return { success: false };
-  }
+  return removeProfilePhotoImpl(email);
 }

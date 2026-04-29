@@ -107,6 +107,7 @@ model ConnectionConfig {
   titulo     String   @default("Conexión confiable para tu día a día")
   subtitulo  String   @default("Disfruta de internet estable, rápido y confiable para tu hogar.")
   buttonText String   @default("Empezar ahora")
+  backgroundImage String @default("/images/conexion.png")
   updatedAt  DateTime @updatedAt
   features   ConnectionFeature[]
 }

@@ -11,7 +11,7 @@ import {
   updateConnectionImage as updateConnectionImageImpl,
 } from "@/backend/actions/connection";
 import {
-  getPlans as getPlansImpl,
+  getPlans,
   updatePlan as updatePlanImpl,
   deletePlan as deletePlanImpl,
   createPlan as createPlanImpl,
@@ -59,9 +59,7 @@ export async function updateConnectionImage(formData: FormData) {
   return updateConnectionImageImpl(formData);
 }
 
-export async function getPlans(zona?: string) {
-  return getPlansImpl(zona);
-}
+export { getPlans };
 
 export async function updatePlan(id: number, data: any) {
   return updatePlanImpl(id, data);

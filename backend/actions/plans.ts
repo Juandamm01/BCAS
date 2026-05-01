@@ -2,8 +2,10 @@
 
 import { prisma } from "@/backend/prisma";
 import { revalidatePath } from "next/cache";
+import { cache } from "react";
+import { Prisma } from "@prisma/client";
 
-export async function getPlans(zona?: string) {
+export const getPlans = cache(async (zona?: string) => {
   try {
     const where = zona ? { zona } : {};
     return await prisma.plan.findMany({
@@ -11,10 +13,31 @@ export async function getPlans(zona?: string) {
       orderBy: { order: "asc" },
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    const isPrisma = error instanceof Prisma.PrismaClientKnownRequestError;
+    const code = isPrisma ? error.code : "";
+
+    const isRecoverable =
+      (isPrisma &&
+        (code === "P1001" ||
+          code === "P2024" ||
+          message.includes("Can't reach database server"))) ||
+      message.includes("Timed out fetching") ||
+      message.includes("connection pool");
+
+    if (isRecoverable) {
+      console.warn(
+        "[getPlans] BD inaccesible, pool saturado o timeout (p. ej. Neon frío). Planes vacíos.",
+        code || message.slice(0, 120)
+      );
+      return [];
+    }
+
     console.error("Error fetching plans:", error);
     return [];
   }
-}
+});
 
 export async function updatePlan(id: number, data: any) {
   try {

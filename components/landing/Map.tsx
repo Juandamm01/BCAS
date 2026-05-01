@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin } from "lucide-react";
 import { getMapPoints } from "@/backend/actions";
+import { COLOMBIA_SVG_PATH, COLOMBIA_VIEW_BOUNDS } from "@/lib/geo/colombiaSvgPath.generated";
+import { META_SVG_PATH } from "@/lib/geo/metaSvgPath.generated";
 
 interface MapPoint {
   id: number;
@@ -55,20 +57,26 @@ const MapSection = () => {
     .filter((point) => typeof point.lat === "number" && typeof point.lng === "number");
   const normalizedPoints = pointsWithCoords.length > 0 ? pointsWithCoords : fallbackBarrios;
 
-  const latValues = normalizedPoints.map((point) => point.lat as number);
-  const lngValues = normalizedPoints.map((point) => point.lng as number);
+  const projectToSvg = (lng: number, lat: number) => {
+    const b = COLOMBIA_VIEW_BOUNDS;
+    const w = b.viewW - b.pad * 2;
+    const h = b.viewH - b.pad * 2;
+    const sx = b.pad + ((lng - b.minLng) / (b.maxLng - b.minLng)) * w;
+    const sy = b.pad + ((b.maxLat - lat) / (b.maxLat - b.minLat)) * h;
+    return { sx, sy };
+  };
 
-  const minLat = Math.min(...latValues);
-  const maxLat = Math.max(...latValues);
-  const minLng = Math.min(...lngValues);
-  const maxLng = Math.max(...lngValues);
+  const vb = COLOMBIA_VIEW_BOUNDS;
+  const cx = vb.viewW / 2;
+  const cy = vb.viewH / 2;
 
   const mapPointToMeta = (point: MapPoint) => {
     const lat = point.lat as number;
     const lng = point.lng as number;
-    const x = ((lng - minLng) / Math.max(maxLng - minLng, 0.00001)) * 140 - 70;
-    const y = (1 - (lat - minLat) / Math.max(maxLat - minLat, 0.00001)) * 120 - 60;
-    return { x, y };
+    const { sx, sy } = projectToSvg(lng, lat);
+    const x = sx - cx;
+    const y = sy - cy;
+    return { x, y, sx, sy };
   };
 
   const anchors = normalizedPoints.map((point) => ({
@@ -82,7 +90,7 @@ const MapSection = () => {
   );
 
   const distributeLabels = (
-    sideItems: Array<{ point: MapPoint; x: number; y: number }>,
+    sideItems: Array<{ point: MapPoint; x: number; y: number; sx: number; sy: number }>,
     side: "left" | "right"
   ) => {
     const sorted = [...sideItems].sort((a, b) => a.y - b.y);
@@ -160,48 +168,52 @@ const MapSection = () => {
         </p>
       </div>
 
-      <div className="relative w-full max-w-6xl h-[640px] md:h-[640px] min-h-[860px] md:min-h-0 flex items-center justify-center border border-white/10 bg-black/40 overflow-hidden">
+      <div className="relative w-full max-w-[98rem] aspect-[1000/1320] min-h-[920px] max-h-[98vh] flex items-center justify-center border border-white/10 bg-black/40 overflow-hidden">
         <div className="relative w-full h-full flex items-center justify-center">
-          <svg viewBox="0 0 1000 700" className="w-full h-full absolute inset-0 pointer-events-none overflow-visible">
-            {/* Colombia outline */}
+          <svg
+            viewBox={`0 0 ${vb.viewW} ${vb.viewH}`}
+            className="w-full h-full absolute inset-0 pointer-events-none overflow-visible"
+            preserveAspectRatio="xMidYMid meet"
+          >
             <path
-              d="M430,112 L495,132 L547,170 L592,227 L585,277 L609,325 L592,392 L603,462 L571,532 L532,592 L480,633 L427,615 L389,566 L344,531 L309,476 L286,413 L301,347 L286,289 L307,235 L350,197 L380,153 Z"
-              className="stroke-white fill-none stroke-[2] opacity-90"
+              d={COLOMBIA_SVG_PATH}
+              className="stroke-white fill-none stroke-[2] opacity-95"
               strokeLinejoin="round"
+              strokeLinecap="round"
             />
 
-            {/* Meta highlight shape */}
-            <g transform="translate(500, 355)">
-              <motion.path
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                d="M-62,-15 L-52,-35 L-28,-28 L-8,-45 L18,-34 L38,-40 L62,-25 L82,-30 L83,14 L78,62 L28,74 L-6,86 L-36,76 L-56,52 L-68,22 Z"
-                className="fill-[#1f6feb]"
-              />
+            <motion.path
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              d={META_SVG_PATH}
+              vectorEffect="nonScalingStroke"
+              className="fill-[#1E6BFF] stroke-white stroke-[1.25]"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
 
-              {(isMobile ? mobileLabelLayouts : labelLayouts).map((item) => {
-                const zoneColor = item.point.color ?? "#2563EB";
+            {(isMobile ? mobileLabelLayouts : labelLayouts).map((item) => {
+              const k = isMobile ? 0.58 : 0.78;
 
-                return (
-                  <g key={item.point.id}>
-                    <line
-                      x1={item.x}
-                      y1={item.y}
-                      x2={isMobile ? item.labelX * 0.58 : item.labelX * 0.78}
-                      y2={isMobile ? item.labelY * 0.58 : item.labelY * 0.78}
-                      className="stroke-white/55 stroke-[1]"
-                    />
-                    <circle
-                      cx={item.x}
-                      cy={item.y}
-                      r={3}
-                      fill={zoneColor}
-                      className="drop-shadow-[0_0_8px_rgba(255,255,255,0.45)]"
-                    />
-                  </g>
-                );
-              })}
-            </g>
+              return (
+                <g key={item.point.id}>
+                  <line
+                    x1={item.sx}
+                    y1={item.sy}
+                    x2={cx + item.labelX * k}
+                    y2={cy + item.labelY * k}
+                    className="stroke-white/70 stroke-[1]"
+                  />
+                  <circle
+                    cx={item.sx}
+                    cy={item.sy}
+                    r={3.25}
+                    fill="#FFFFFF"
+                    className="stroke-white/30 stroke-[0.5]"
+                  />
+                </g>
+              );
+            })}
           </svg>
 
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -238,7 +250,6 @@ const MapSection = () => {
           </div>
         </div>
       </div>
-
     </section>
   );
 };
